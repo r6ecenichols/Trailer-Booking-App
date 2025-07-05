@@ -3,4 +3,5 @@ services:
     name: trailer-booking-app
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: python -m gunicorn app:app
+
