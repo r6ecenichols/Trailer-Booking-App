@@ -1,0 +1,63 @@
+from flask import Flask, render_template, request, redirect, url_for, flash
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+
+app = Flask(__name__)
+app.secret_key = 'your_secret_key'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///bookings.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
+class Booking(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    client_name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(100), nullable=False)
+    po_number = db.Column(db.String(50), nullable=True)
+    payment_ref = db.Column(db.String(50), nullable=True)
+    trailer_id = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+@app.before_first_request
+def create_tables():
+    db.create_all()
+
+def get_available_trailer():
+    used_trailers = [b.trailer_id for b in Booking.query.all() if b.trailer_id]
+    for i in range(1, 26):
+        if i not in used_trailers:
+            return i
+    return None
+
+@app.route('/', methods=['GET', 'POST'])
+def book():
+    if request.method == 'POST':
+        name = request.form['name']
+        email = request.form['email']
+        po = request.form['po']
+        payment = request.form['payment']
+
+        if not po and not payment:
+            flash('Please provide a PO Number or Payment Reference.', 'error')
+            return redirect(url_for('book'))
+
+        trailer = get_available_trailer()
+        if not trailer:
+            flash('No trailers are currently available.', 'error')
+            return redirect(url_for('book'))
+
+        booking = Booking(client_name=name, email=email, po_number=po, payment_ref=payment, trailer_id=trailer)
+        db.session.add(booking)
+        db.session.commit()
+        flash(f'Trailer {trailer} has been allocated to you.', 'success')
+        return redirect(url_for('book'))
+
+    return render_template('book.html')
+
+@app.route('/admin')
+def admin():
+    bookings = Booking.query.order_by(Booking.created_at.desc()).all()
+    return render_template('admin.html', bookings=bookings)
+
+if __name__ == '__main__':
+    app.run(debug=True)
